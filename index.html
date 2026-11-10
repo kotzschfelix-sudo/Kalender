@@ -250,7 +250,10 @@ const smodal=()=>`<div class="mb" data-a="sclose"><div class="card md" data-a="s
 <label>Anzeigename<input id="dn" value="${esc(S.set.name||'')}" placeholder="${esc(S.user.name)}"></label>
 <label>Design<select id="th">${[['dark','Dunkel'],['light','Hell'],['auto','Automatisch']].map(x=>`<option value="${x[0]}" ${(S.set.theme||'dark')==x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label>
 <label>Akzentfarbe<div class="two"><input id="ac" type="color" value="${S.set.accent||(isD()?'#e8eaef':'#14171f')}"><button class="b" data-a="acr">Standard</button></div></label>
-<label class="ck"><input type="checkbox" data-a="tgn" ${S.set.notif?'checked':''}> Erinnerungen als Browser-Benachrichtigung</label><hr>
+<label class="ck"><input type="checkbox" data-a="tgn" ${S.set.notif?'checked':''}> Push-Benachrichtigungen für Erinnerungen</label>
+<p class="sm m">Push-Erinnerungen können auch ankommen, wenn MyKalender geschlossen ist. Auf iPhone und iPad muss MyKalender dafür zum Home-Bildschirm hinzugefügt sein.</p>
+${S.set.pushActive?'<button class="b" data-a="ptest">Test-Benachrichtigung senden</button>':''}
+${S.pushMsg?'<p class="sm">'+esc(S.pushMsg)+'</p>':''}<hr>
 <label>Bundesland<select id="bl"><option value="">– bitte wählen –</option>${ST.map(x=>`<option value="${x[0]}" ${S.set.state==x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label>
 <label class="ck"><input type="checkbox" data-a="tgf" ${S.set.hideF?'':'checked'}> Feiertage anzeigen</label><label class="ck"><input type="checkbox" data-a="tgv" ${S.set.hideV?'':'checked'}> Schulferien anzeigen</label>${S.ferr?'<p class="sm er">Schulferien konnten nicht geladen werden.</p>':''}
 <div class="sm m">Eigenes Label</div><div class="two"><input id="ln" placeholder="Name"><input id="lcI" type="color" value="#ec4899"></div><button class="b" data-a="ladd">+ Label hinzufügen</button>${(S.set.labels||[]).map(l=>`<div class="ph"><span><span class="dt" style="background:${l[2]}"></span> ${esc(l[1])}</span><button class="ic" data-a="ldel" data-id="${l[0]}">${ico('x',16)}</button></div>`).join('')}
@@ -258,7 +261,39 @@ const smodal=()=>`<div class="mb" data-a="sclose"><div class="card md" data-a="s
 const symodal=()=>`<div class="mb" data-a="syclose"><div class="card md" data-a="stop"><h2>Synchronisierung</h2><p class="m sm">Sichere deine Termine als .ics-Datei und importiere sie in Google Kalender oder den Apple-Kalender. Termine aus diesen Kalendern kannst du hier einlesen.</p><div class="stk"><button class="b" data-a="exp">${ico('down',16)} Termine exportieren (.ics)</button><label class="b">${ico('up',16)} Termine importieren (.ics)<input id="imp" type="file" accept=".ics,text/calendar" hidden></label></div><p class="sm m">Ein automatischer Abgleich mit Google und Apple ist in Planung.</p><div class="ac"><span class="sp"></span><button class="b g" data-a="syclose">Schließen</button></div></div></div>`;
 A.menu=()=>{S.menu=!S.menu;render()};A.set=()=>{S.menu=false;S.sm=true;render()};A.sclose=()=>{S.sm=false;render()};
 A.ssave=()=>{rd();S.sm=false;applyDesign();saveSet();render()};A.pdel2=()=>{rd();delete S.set.photo;render()};
-A.tgn=async()=>{rd();if(!S.set.notif){if(!('Notification' in window)){alert('Dieser Browser unterstützt keine Benachrichtigungen.');return render()}if(await Notification.requestPermission()!='granted'){alert('Benachrichtigungen wurden nicht erlaubt.');return render()}}S.set.notif=!S.set.notif;render()};
+
+async function enablePush(){
+ if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))throw new Error('Dieser Browser unterstützt keine Push-Benachrichtigungen.');
+ if(!window.isSecureContext)throw new Error('Push funktioniert nur über HTTPS.');
+ const permission=await Notification.requestPermission();
+ if(permission!=='granted')throw new Error('Die Benachrichtigungsberechtigung wurde nicht erteilt.');
+ const reg=await navigator.serviceWorker.ready;
+ const keyResult=await sb.functions.invoke('clever-function',{body:{action:'key'}});
+ if(keyResult.error||!keyResult.data||!keyResult.data.key)throw new Error('Der Push-Schlüssel konnte nicht geladen werden.');
+ const key=keyResult.data.key.replace(/-/g,'+').replace(/_/g,'/');
+ const raw=Uint8Array.from(atob(key+'='.repeat((4-key.length%4)%4)),c=>c.charCodeAt(0));
+ let sub=await reg.pushManager.getSubscription();
+ if(!sub)sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:raw});
+ const result=await sb.rpc('push_subscribe',{ep:sub.endpoint,s:sub.toJSON(),tz:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin'});
+ if(result.error){await sub.unsubscribe();throw result.error;}
+ S.set.notif=true;S.set.pushActive=true;S.pushMsg='Push-Benachrichtigungen sind auf diesem Gerät aktiviert.';
+ await saveSet();
+}
+A.tgn=async()=>{rd();S.pushMsg='';try{
+ if(!S.set.pushActive){await enablePush();}
+ else{
+  const reg=await navigator.serviceWorker.ready,sub=await reg.pushManager.getSubscription();
+  if(sub){const result=await sb.rpc('push_unsubscribe',{ep:sub.endpoint});if(result.error)throw result.error;await sub.unsubscribe();}
+  S.set.notif=false;S.set.pushActive=false;S.pushMsg='Push-Benachrichtigungen wurden auf diesem Gerät deaktiviert.';await saveSet();
+ }
+ }catch(e){S.pushMsg=e.message||'Push konnte nicht eingerichtet werden.';alert(S.pushMsg);}
+ render();
+};
+A.ptest=async()=>{S.pushMsg='Sende Test-Benachrichtigung …';render();const result=await sb.functions.invoke('clever-function',{body:{action:'test'}});
+ if(result.error||result.data?.error||!result.data?.sent){S.pushMsg=result.data?.error||result.error?.message||'Test-Benachrichtigung konnte nicht gesendet werden.';}
+ else S.pushMsg='Test-Benachrichtigung wurde versendet.';
+ render();
+};
 A.exp=()=>{S.menu=false;render();icsOut()};
 function icsOut(){const z=d=>d.replace(/-/g,''),t=s=>s.replace(':','')+'00',x=s=>String(s||'').replace(/[\\;,]/g,m=>'\\'+m).replace(/\n/g,'\\n'),R={daily:'DAILY',weekly:'WEEKLY',monthly:'MONTHLY',yearly:'YEARLY'};
  let o='BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//MyCalendar//DE\r\n';
@@ -281,7 +316,7 @@ document.addEventListener('change',ev=>{const i=ev.target.id,f=ev.target.files&&
  if(i=='imp'){S.menu=false;S.sy=false;f.text().then(icsIn)}
  if(i=='pf'){rd();const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=c.height=96;const m=Math.min(img.width,img.height);c.getContext('2d').drawImage(img,(img.width-m)/2,(img.height-m)/2,m,m,0,0,96,96);S.set.photo=c.toDataURL('image/jpeg',.8);render()};img.src=URL.createObjectURL(f)}});
 const fired=new Set();
-function chk(){if(!S.user||!S.set.notif||!('Notification' in window)||Notification.permission!='granted')return;const n=new Date();
+function chk(){if(!S.user||!S.set.notif||S.set.pushActive||!('Notification' in window)||Notification.permission!='granted')return;const n=new Date();
  for(const e of S.events){if(e.remind===''||e.remind==null||e.allDay)continue;const m=+e.remind;
   for(const k of [key(n),key(ad(n,1))]){if(!occ(e,k))continue;const t=pk(k),[h,mi]=e.start.split(':');t.setHours(+h,+mi);const df2=(t-n)/6e4,id=e.id+k+m;
    if(df2<=m&&df2>-1&&!fired.has(id)){fired.add(id);new Notification(e.title||'Termin',{body:e.start+' Uhr'+(e.loc?' · '+e.loc:'')})}}}}

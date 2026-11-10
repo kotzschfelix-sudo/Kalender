@@ -52,6 +52,39 @@ self.addEventListener('fetch', event => {
   }
 });
 
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; }
+  catch { data = { body: event.data ? event.data.text() : '' }; }
+
+  const title = data.title || 'MyKalender';
+  const options = {
+    body: data.body || 'Du hast eine Erinnerung.',
+    icon: new URL('icons/icon.svg', BASE).href,
+    badge: new URL('icons/icon.svg', BASE).href,
+    tag: data.tag || 'mykalender-reminder',
+    data: { url: data.url || './' }
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || './', BASE).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of windows) {
+      if (client.url.startsWith(BASE) && 'focus' in client) {
+        await client.focus();
+        if ('navigate' in client && client.url !== target) await client.navigate(target);
+        return;
+      }
+    }
+    if (self.clients.openWindow) await self.clients.openWindow(target);
+  })());
+});
+
 self.addEventListener('message', event => {
   if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });

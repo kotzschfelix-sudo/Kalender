@@ -94,7 +94,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 async function hash(t){try{const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}catch{return btoa(unescape(encodeURIComponent(t)))}}
 function occ(e,k){if(k<e.date)return false;if(e.rep=='none')return k<=e.endDate;if(k==e.date)return true;if(e.until&&k>e.until)return false;const d=pk(k),s=pk(e.date);
  if(e.rep=='daily')return true;if(e.rep=='weekly')return df(e.date,k)%7==0;if(e.rep=='monthly')return d.getDate()==s.getDate();return d.getDate()==s.getDate()&&d.getMonth()==s.getMonth()}
-const S={users:[],events:[],view:'month',cur:new Date(),hidden:[],q:'',ed:null,dark:ld('cal_dark',null),err:'',mode:'login',nm:'',periods:[],msg:'Lade deinen Kalender …',saveErr:false,names:{},info:'',set:{state:'',labels:[]},hol:{},ferr:false,menu:false,sm:false,prem:false,sy:false,sel:''};
+const S={users:[],events:[],view:'month',cur:new Date(),hidden:[],q:'',ed:null,dark:ld('cal_dark',null),err:'',mode:'login',nm:'',periods:[],msg:'Lade deinen Kalender …',saveErr:false,names:{},info:'',set:{state:'',labels:[]},hol:{},ferr:false,menu:false,sm:false,prem:false,sy:false,sel:'',tasks:[],taskErr:'',taskLoading:false};
 S.user=null;
 const isDark=()=>S.dark??matchMedia('(prefers-color-scheme: dark)').matches;
 const theme=()=>{if(S.dark!==null)document.documentElement.dataset.theme=S.dark?'dark':'light'};
@@ -136,7 +136,12 @@ function render(){const app=$('#app');if(!S.user){app.innerHTML=authv();return}
  const v=S.view,m=mon(S.cur),s6=ad(m,6),dk=isD(),sd=pk(S.sel),dl=on(S.sel);
  const hd=v=='agenda'? 'Agenda · nächste 60 Tage':v=='week'?`${m.getDate()}. ${MO[m.getMonth()]} – ${s6.getDate()}. ${MO[s6.getMonth()]} ${s6.getFullYear()}`:v=='day'?`${WL[(S.cur.getDay()+6)%7]}, ${S.cur.getDate()}. ${MO[S.cur.getMonth()]}`:`${MO[S.cur.getMonth()]} ${S.cur.getFullYear()}`;
  const nv=(ic,t,a,x)=>a?`<button class="ni${x?' on':''}" data-a="${a}">${ico(ic,18)}${t}</button>`:`<button class="ni dis" disabled>${ico(ic,18)}${t}<small>bald</small></button>`;
- app.innerHTML=`<div class="app"><aside class="sb"><img class="slogo" src="${IMG_K}" alt="MyKalender"><nav class="nv">${nv('home','Dashboard','dash')}${nv('cal','Kalender','today',1)}${nv('check','Aufgaben')}${nv('note','Notizen')}${nv('user','Mein Profil','set')}</nav><hr><nav class="nv">${nv('drop','Design & Darstellung','set')}${nv('sync','Synchronisierung','sync')}${nv('gear','Einstellungen','set')}</nav><span class="sp2"></span>
+ if(v==='tasks'){
+  const taskRows=S.taskLoading?'<p class="m pd">Aufgaben werden geladen …</p>':S.taskErr?'<p class="er">'+esc(S.taskErr)+'</p>':S.tasks.length?S.tasks.slice().sort((a,b)=>(a.due||'9999').localeCompare(b.due||'9999')).map(t=>'<div class="rw"><label class="ck"><input type="checkbox" data-task-check="'+esc(t.id)+'" '+(t.done?'checked':'')+'><span style="'+(t.done?'text-decoration:line-through;opacity:.6':'')+'">'+esc(t.title||'Ohne Titel')+'</span></label><div class="sm m">'+(t.due?'Fällig: '+esc(t.due):'Kein Fälligkeitsdatum')+' · Priorität: '+({low:'Niedrig',medium:'Mittel',high:'Hoch'}[t.priority]||'Mittel')+'</div>'+(t.description?'<div class="sm">'+esc(t.description)+'</div>':'')+'</div>').join(''):'<p class="m pd">Noch keine Aufgaben vorhanden. Erstelle Aufgaben in MyTasks – sie erscheinen hier automatisch.</p>';
+  app.innerHTML=`<div class="app"><aside class="sb"><img class="slogo" src="${IMG_K}" alt="MyKalender"><nav class="nv">${nv('home','Dashboard','dash')}${nv('cal','Kalender','today')}${nv('check','Aufgaben','tasks',1)}${nv('note','Notizen')}${nv('user','Mein Profil','set')}</nav><hr><nav class="nv">${nv('drop','Design & Darstellung','set')}${nv('sync','Synchronisierung','sync')}${nv('gear','Einstellungen','set')}</nav><span class="sp2"></span><button class="prem" data-a="prem"><b>${ico(S.prem?'star':'crown',16)} MyKalender Premium</b><span class="sm m">${S.prem?'Premium ist aktiv.':'Mehr Möglichkeiten für deine Planung.'}</span></button><div class="card ucard"><div class="av">${avatar()}</div><div class="gr"><b>${esc(dn())}</b><div class="sm m">${S.prem?'Premium':'Standard'}</div></div><button class="b g" data-a="out" title="Abmelden" style="padding:6px 8px;font-size:12px">Abmelden</button></div></aside><main class="ctr"><div class="top"><div><div class="sm m">MYDIGITAL / MYKALENDER</div><h1>Meine Aufgaben</h1></div><button class="b" data-a="tasksReload">${ico('sync',16)} Aktualisieren</button></div><section class="card sw"><div class="mh"><h2>Aufgaben aus MyTasks</h2><span class="sp"></span><span class="sm m">${S.tasks.filter(t=>!t.done).length} offen · ${S.tasks.filter(t=>t.done).length} erledigt</span></div>${taskRows}</section></main><aside class="rt"><div class="card"><h3>${ico('check',16)} MyTasks</h3><p class="sm m">Deine Aufgaben werden über dein gemeinsames MyDigital-Konto synchronisiert. Änderungen am Erledigt-Status werden auch in MyTasks gespeichert.</p></div><a class="dcard" href="https://kotzschfelix-sudo.github.io/MyTasks/"><img src="https://kotzschfelix-sudo.github.io/MyTasks/icons/mytasks.svg" alt="MyTasks"><small>MyTasks öffnen</small></a><a class="dcard" href="${HUB_URL}"><img src="${IMG_D}" alt="MyDigital"><small>MyDigital-Dashboard</small></a></aside></div>`;
+  return;
+ }
+ app.innerHTML=`<div class="app"><aside class="sb"><img class="slogo" src="${IMG_K}" alt="MyKalender"><nav class="nv">${nv('home','Dashboard','dash')}${nv('cal','Kalender','today',1)}${nv('check','Aufgaben','tasks')}${nv('note','Notizen')}${nv('user','Mein Profil','set')}</nav><hr><nav class="nv">${nv('drop','Design & Darstellung','set')}${nv('sync','Synchronisierung','sync')}${nv('gear','Einstellungen','set')}</nav><span class="sp2"></span>
 <button class="prem" data-a="prem"><b>${ico(S.prem?'star':'crown',16)} MyKalender Premium</b><span class="sm m">${S.prem?'Premium ist aktiv.':'Mehr Möglichkeiten für deine Planung.'}</span></button>
 <div class="card ucard"><div class="av">${avatar()}</div><div class="gr"><b>${esc(dn())}</b><div class="sm m">${S.prem?'Premium':'Standard'}</div></div><button class="b g" data-a="out" title="Abmelden" style="padding:6px 8px;font-size:12px">Abmelden</button></div></aside>
 <main class="ctr"><div class="top"><a class="b" href="${HUB_URL}" title="Zurück zum Dashboard">${ico('left',16)} Dashboard</a><div class="srw">${ico('search',16)}<input id="q" class="sr" placeholder="Suche nach Terminen …" value="${esc(S.q)}"></div>${S.saveErr?'<span class="er">'+ico('warn',14)+' Nicht gespeichert</span>':''}<button class="ic" data-a="set" title="Erinnerungen">${ico('bell',20)}</button><div class="tt"><button class="${dk?'':'on'}" data-a="th" data-id="light">${ico('sun',17)}</button><button class="${dk?'on':''}" data-a="th" data-id="dark">${ico('moon',17)}</button></div></div>
@@ -156,6 +161,9 @@ const save=()=>{q=q.then(sync)};
 function login(u){S.user=u;S.err='';sv('cal_session',u.id);S.periods=ld('cal_periods_'+u.id,[]);render()}
 const mv=d=>{S.cur=S.view=='week'?ad(S.cur,7*d):S.view=='day'?ad(S.cur,d):new Date(S.cur.getFullYear(),S.cur.getMonth()+d,1);if(S.view=='day')S.sel=key(S.cur);render()};
 const A={
+ async tasks(){S.view='tasks';S.taskErr='';S.taskLoading=true;render();try{await loadTasks()}catch(e){S.taskErr='Aufgaben konnten nicht geladen werden: '+(e.message||'Unbekannter Fehler')}S.taskLoading=false;render()},
+ async tasksReload(){S.taskErr='';S.taskLoading=true;render();try{await loadTasks()}catch(e){S.taskErr='Aufgaben konnten nicht geladen werden: '+(e.message||'Unbekannter Fehler')}S.taskLoading=false;render()},
+ async taskToggle(el){const t=S.tasks.find(x=>x.id===el.dataset.taskCheck);if(!t)return;const old=!!t.done;t.done=el.checked;const{error}=await sb.from('tasks').update({data:t}).eq('id',t.id).eq('owner',S.user.id);if(error){t.done=old;S.taskErr='Änderung konnte nicht gespeichert werden: '+error.message}render()},
  stop(){},close(){S.ed=null;render()},mode(){S.mode=S.mode=='login'?'register':'login';S.err='';render()},
  async auth(){const n=$('#un').value.trim(),p=$('#pw').value;S.nm=n;if(!n||p.length<4){S.err='Bitte Namen und ein Passwort mit mindestens 4 Zeichen eingeben.';return render()}
   const h=await hash(p),low=n.toLowerCase();
@@ -163,7 +171,7 @@ const A={
   else{const u=S.users.find(x=>x.name.toLowerCase()==low&&x.pass==h);if(!u){S.err='Name oder Passwort ist falsch.';return render()}login(u)}},
  out(){S.user=null;S.ed=null;sv('cal_session',null);render()},
  dark(){S.dark=!isDark();sv('cal_dark',S.dark);theme();render()},
- today(){S.cur=new Date();render()},prev(){mv(-1)},next(){mv(1)},view(el){S.view=el.dataset.id;render()},
+ today(){S.view='month';S.cur=new Date();render()},prev(){mv(-1)},next(){mv(1)},view(el){S.view=el.dataset.id;render()},
  lab(el){const i=el.dataset.id;S.hidden=S.hidden.includes(i)?S.hidden.filter(x=>x!=i):[...S.hidden,i];render()},
  new(el){S.ed={isNew:true,ev:blank(el.dataset.k||S.sel||T())};render()},
  edit(el){const e=S.events.find(x=>x.id==el.dataset.id);if(e){S.ed={isNew:false,ev:{...e,shared:[...e.shared]}};render()}},
@@ -178,7 +186,7 @@ const A={
  pdel(el){S.periods=S.periods.filter(p=>p.id!=el.dataset.id);save();render()}
 };
 document.addEventListener('click',ev=>{const el=ev.target.closest('[data-a]');if(el&&A[el.dataset.a])A[el.dataset.a](el)});
-document.addEventListener('change',ev=>{if(ev.target.id=='q'){S.q=ev.target.value;render()}});
+document.addEventListener('change',ev=>{if(ev.target.id=='q'){S.q=ev.target.value;render()}if(ev.target.matches('[data-task-check]'))A.taskToggle(ev.target)});
 document.addEventListener('keydown',ev=>{if(ev.key=='Enter'&&ev.target.id=='pw')A.auth()});
 theme();
 const authv=()=>{const m=S.mode;if(S.msg)return`<div class="aw"><img class="corner" src="${IMG_K}" alt="MyKalender"><div class="card au"><img class="alogo" src="${IMG_D}" alt="MyDigital"><p class="m">${S.msg}</p></div></div>`;
@@ -213,6 +221,7 @@ A.save=async()=>{const e={...S.ed.ev,title:$('#t').value.trim()||'(Ohne Titel)',
   data.forEach(p=>S.names[p.id]=p.username);S.users=Object.entries(S.names).map(([id,name])=>({id,name}));e.shared=data.map(p=>p.id).filter(i=>i!=S.user.id)}else e.shared=[];
  const i=S.events.findIndex(x=>x.id==e.id);if(i<0)S.events.push(e);else S.events[i]=e;save();S.ed=null;render()};
 A.leave=async()=>{const id=S.ed.ev.id;await sb.rpc('leave_event',{eid:id});S.events=S.events.filter(x=>x.id!=id);S.ed=null;render()};
+async function loadTasks(){const{data,error}=await sb.from('tasks').select('id,data,created_at').eq('owner',S.user.id).order('created_at',{ascending:false});if(error)throw error;S.tasks=(data||[]).map(r=>({...r.data,id:r.id}))}
 async function loadAll(){
  const[ev,pe]=await Promise.all([sb.from('events').select('*'),sb.from('periods').select('*')]);if(ev.error||pe.error)throw ev.error||pe.error;
  S.events=ev.data.map(r=>({...r.data,id:r.id,owner:r.owner,shared:r.shared||[]}));S.periods=pe.data.map(r=>({...r.data,id:r.id}));

@@ -97,7 +97,7 @@ function occ(e,k){if(k<e.date)return false;if(e.rep=='none')return k<=e.endDate;
 const S={users:[],events:[],view:'month',cur:new Date(),hidden:[],q:'',ed:null,dark:ld('cal_dark',null),err:'',mode:'login',nm:'',periods:[],msg:'Lade deinen Kalender …',saveErr:false,names:{},info:'',set:{state:'',labels:[]},hol:{},ferr:false,menu:false,sm:false,prem:false,sy:false,sel:'',tasks:[],taskErr:'',taskLoading:false};
 S.user=null;let tasksChannel=null;
 function stopTasksRealtime(){if(tasksChannel){sb.removeChannel(tasksChannel);tasksChannel=null}}
-function startTasksRealtime(){if(!S.user)return;stopTasksRealtime();const userId=S.user.id,receive=payload=>{if(!S.user||S.user.id!==userId||!payload.new)return;const incoming={...(payload.new.data||{}),id:payload.new.id},i=S.tasks.findIndex(t=>t.id===incoming.id);if(i>=0)S.tasks[i]=incoming;else S.tasks.unshift(incoming);if(S.view==='tasks')render()};tasksChannel=sb.channel('mykalender-tasks-'+userId).on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks',filter:'owner=eq.'+userId},receive).on('postgres_changes',{event:'UPDATE',schema:'public',table:'tasks',filter:'owner=eq.'+userId},receive).subscribe()}
+function startTasksRealtime(){if(!S.user)return;stopTasksRealtime();const userId=S.user.id,receive=payload=>{if(!S.user||S.user.id!==userId||!payload.new)return;const incoming={...(payload.new.data||{}),id:payload.new.id};if(incoming.deleted)S.tasks=S.tasks.filter(t=>t.id!==incoming.id);else{const i=S.tasks.findIndex(t=>t.id===incoming.id);if(i>=0)S.tasks[i]=incoming;else S.tasks.unshift(incoming)}if(S.view==='tasks')render()};tasksChannel=sb.channel('mykalender-tasks-'+userId).on('postgres_changes',{event:'INSERT',schema:'public',table:'tasks',filter:'owner=eq.'+userId},receive).on('postgres_changes',{event:'UPDATE',schema:'public',table:'tasks',filter:'owner=eq.'+userId},receive).subscribe()}
 const isDark=()=>S.dark??matchMedia('(prefers-color-scheme: dark)').matches;
 const theme=()=>{if(S.dark!==null)document.documentElement.dataset.theme=S.dark?'dark':'light'};
 const blank=k=>({id:uid(),owner:S.user.id,title:'',desc:'',loc:'',date:k,endDate:k,allDay:false,start:'09:00',end:'10:00',label:'work',rep:'none',shared:[]});
@@ -223,7 +223,7 @@ A.save=async()=>{const e={...S.ed.ev,title:$('#t').value.trim()||'(Ohne Titel)',
   data.forEach(p=>S.names[p.id]=p.username);S.users=Object.entries(S.names).map(([id,name])=>({id,name}));e.shared=data.map(p=>p.id).filter(i=>i!=S.user.id)}else e.shared=[];
  const i=S.events.findIndex(x=>x.id==e.id);if(i<0)S.events.push(e);else S.events[i]=e;save();S.ed=null;render()};
 A.leave=async()=>{const id=S.ed.ev.id;await sb.rpc('leave_event',{eid:id});S.events=S.events.filter(x=>x.id!=id);S.ed=null;render()};
-async function loadTasks(){const{data,error}=await sb.from('tasks').select('id,data,created_at').eq('owner',S.user.id).order('created_at',{ascending:false});if(error)throw error;S.tasks=(data||[]).map(r=>({...r.data,id:r.id}))}
+async function loadTasks(){const{data,error}=await sb.from('tasks').select('id,data,created_at').eq('owner',S.user.id).order('created_at',{ascending:false});if(error)throw error;S.tasks=(data||[]).filter(r=>!r.data?.deleted).map(r=>({...r.data,id:r.id}))}
 async function loadAll(){
  const[ev,pe]=await Promise.all([sb.from('events').select('*'),sb.from('periods').select('*')]);if(ev.error||pe.error)throw ev.error||pe.error;
  S.events=ev.data.map(r=>({...r.data,id:r.id,owner:r.owner,shared:r.shared||[]}));S.periods=pe.data.map(r=>({...r.data,id:r.id}));

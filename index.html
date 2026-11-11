@@ -346,7 +346,7 @@ document.addEventListener('click',ev=>{if(sup){ev.stopPropagation();ev.preventDe
 A.dash=()=>{location.href=HUB_URL};
 A.sel=el=>{S.sel=el.dataset.k;render()};
 A.today=()=>{S.cur=new Date();S.sel=T();render()};
-A.view=el=>{S.view=el.dataset.id;if(S.view=='day')S.cur=pk(S.sel||T());render()};
+A.view=el=>{if(el.dataset.id=='agenda'&&!S.prem)return alert('Die Listenansicht ist eine Premium-Funktion.');S.view=el.dataset.id;if(S.view=='day')S.cur=pk(S.sel||T());render()};
 A.th=el=>{S.set.theme=el.dataset.id;applyDesign();saveSet();render()};
 A.acr=()=>{rd();delete S.set.accent;S.accTouched=false;applyDesign();render()};
 A.sync=()=>{S.sy=true;render()};A.syclose=()=>{S.sy=false;render()};A.exp=()=>{icsOut()};

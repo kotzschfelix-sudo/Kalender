@@ -1,4 +1,4 @@
-const CACHE_NAME = 'mykalender-shell-v1';
+const CACHE_NAME = 'mykalender-shell-v2';
 const BASE = self.registration.scope;
 const APP_SHELL = [
   BASE,
